@@ -17,6 +17,7 @@ interface VirtualNode {
 	events?: any;
 	children?: VirtualNode[];
 	value?: string;
+	key?: string;
 
 	dom?: Node;
 }
@@ -300,20 +301,28 @@ function updateNode(oldNode: VirtualNode, node: VirtualNode) {
 
 class VDom {
 
-	public append(domNode: Node, node: VirtualNode) {
+	private mountChildren(node: VirtualNode) {
+		const fragment = document.createDocumentFragment();
+
+		for (let i = 0; i < node.children.length; i++) {
+			this.append(fragment, node.children[i]);
+		}
+
+		node.dom.appendChild(fragment);
+	}
+
+	public append(domNode: Node, node: VirtualNode, insertBefore?: Node) {
 		mountNode(node);
 
 		if (NodeUtils.hasChildren(node)) {
-			const fragment = document.createDocumentFragment();
-
-			for (let i = 0; i < node.children.length; i++) {
-				this.append(fragment, node.children[i]);
-			}
-
-			node.dom.appendChild(fragment);
+			this.mountChildren(node);
 		}
 
-		domNode.appendChild(node.dom);
+		if (insertBefore) {
+			domNode.insertBefore(node.dom, insertBefore);
+		} else {
+			domNode.appendChild(node.dom);
+		}
 	}
 
 	public update(oldNode: VirtualNode, node: VirtualNode) {
@@ -322,9 +331,52 @@ class VDom {
 		}
 
 		updateNode(oldNode, node);
+
+		const oldChildren = NodeUtils.hasChildren(oldNode);
+		const newChildren = NodeUtils.hasChildren(node);
+
+		let oldChild;
+		let child;
+
+		// Updating children
+		if (oldChildren && newChildren) {
+			for (let i = 0; i < oldNode.children.length; i++) {
+				oldChild = oldNode.children[i];
+				child = node.children[i];
+
+				// Remove a node that no longer exists
+				if (!child) {
+					this.remove(oldChild);
+					continue;
+				}
+
+				// Destroy previous child and create new
+				if (oldChild.tag !== child.tag) {
+					this.append(node.dom, child, oldChild.dom);
+					this.remove(oldChild);
+					continue;
+				}
+
+				// Update a child by key
+				if (oldChild.key === child.key) {
+					this.update(oldChild, child);
+					continue;
+				}
+
+				// Insert new child before the old one
+				this.append(node.dom, child, oldChild.dom);
+				// Stay here
+				i--;
+			}
+		} else if (newChildren) {
+			this.mountChildren(node);
+		}
 	}
 
 	public remove(node: VirtualNode) {
+		const {dom} = node;
+		NodeUtils.disconnectWithDOM(dom);
+		dom.parentNode.removeChild(dom);
 	}
 
 }
@@ -431,6 +483,87 @@ describe('update', () => {
 			{tag: 'div', attrs: {style: {color: 'black'}}},
 			{tag: 'div', attrs: {style: 'opacity: 0;'}},
 			'<div style="opacity: 0;"></div>',
+		);
+	});
+
+	test('update node with simple child', () => {
+		testVDomUpdate(
+			{
+				tag: 'div',
+				children: [
+					{
+						tag: 'strong'
+					}
+				]
+			},
+			{
+				tag: 'div',
+				children: [
+					{
+						tag: 'strong',
+						attrs: {
+							'data-id': 14
+						}
+					}
+				]
+			},
+			'<div><strong data-id="14"></strong></div>',
+		);
+	});
+
+	test('update node with multiple children', () => {
+		testVDomUpdate(
+			{
+				tag: 'div',
+				children: [
+					{
+						tag: 'span',
+						attrs: {
+							style: {
+								color: 'black'
+							}
+						}
+					},
+					{
+						tag: 'strong',
+						children: [
+							{
+								tag: '#',
+								value: 'Hello!'
+							}
+						]
+					}
+				]
+			},
+			{
+				tag: 'div',
+				children: [
+					{
+						tag: 'span',
+						attrs: {
+							style: {
+								color: 'black'
+							}
+						},
+						children: [
+							{
+								tag: '#',
+								value: 'World'
+							}
+						]
+					},
+					{
+						tag: 'strong',
+						children: [
+							{
+								tag: '!',
+								value: 'Hello!'
+							}
+						]
+					}
+				]
+			},
+			'<div><span style="color: black;">World</span><strong><!--Hello!--></strong></div>',
 		);
 	});
 
