@@ -3,8 +3,8 @@ import NodeResolve from 'rollup-plugin-node-resolve';
 const baseConfig = format => ({
 	input: 'lib/index.js',
 	output: {
-		file: `dist/automatons.${format}.js`,
-		name: 'automatons',
+		file: `dist/reshetaw.${format}.js`,
+		name: 'reshetaw',
 		format,
 	},
 	plugins: [NodeResolve()]
