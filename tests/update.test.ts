@@ -240,4 +240,12 @@ describe("update", () => {
 		);
 	});
 
+	xtest("cito error test", () => {
+		testVDomUpdate(
+			{tag: "div", attrs: {}},
+			{tag: "div", attrs: {id: "id1"}},
+			'<div id="id1"></div>',
+		);
+	});
+
 });

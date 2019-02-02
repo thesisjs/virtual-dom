@@ -1,6 +1,6 @@
 import {VirtualDOM} from "../src";
 
-describe("citoDefs", () => {
+describe("cito", () => {
 
 	const virtualDOM = new VirtualDOM();
 
@@ -1002,13 +1002,51 @@ describe("citoDefs", () => {
 		],
 	};
 
+	function deepClone(node: object) {
+		return JSON.parse(JSON.stringify(node));
+	}
+
 	Object.keys(suites).forEach((suiteName) => {
 		(suites as any)[suiteName].forEach((testData: any) => {
-			test(`${suiteName}: ${testData.name}`, () => {
+			test(`[append] ${suiteName}: ${testData.name}`, () => {
 				const root = document.createElement("I");
-				virtualDOM.append(root, testData.node);
+				virtualDOM.append(root, deepClone(testData.node));
 
 				expect(root.innerHTML).toEqual(testData.html);
+			});
+		});
+	});
+
+	Object.keys(suites).forEach((suiteName) => {
+		const tests = (suites as any)[suiteName];
+
+		tests.forEach((def1: any) => {
+			tests.forEach((def2: any) => {
+				if ((def1.updateOnlySelf || def2.updateOnlySelf) && def1 !== def2) {
+					return;
+				}
+
+				test(`[update] ${suiteName}: ${def1.name} -> ${def2.name}`, () => {
+					const root = document.createElement("I");
+					const node = deepClone(def1.node);
+
+					virtualDOM.append(root, node);
+					virtualDOM.update(node, deepClone(def2.node));
+
+					expect(root.innerHTML).toEqual(def2.html);
+				});
+
+				test(`[update] ${suiteName}: ${def1.name} -> ${def2.name} -> ${def1.name}`, () => {
+					const root = document.createElement("I");
+					const def1Node = deepClone(def1.node);
+					const def2Node = deepClone(def2.node);
+
+					virtualDOM.append(root, def1Node);
+					virtualDOM.update(def1Node, def2Node);
+					virtualDOM.update(def2Node, deepClone(def1.node));
+
+					expect(root.innerHTML).toEqual(def1.html);
+				});
 			});
 		});
 	});

@@ -148,8 +148,8 @@ function updateElementNode(oldNode: IVirtualNode, node: IVirtualNode) {
 		for (attr in node.attrs) {
 			value = node.attrs[attr];
 
-			if (!oldNode.attrs) {
-				dom.setAttribute(attr, String(value));
+			if (!oldNode.attrs[attr]) {
+				NodeUtils.setDOMAttribute(dom, attr, value);
 			}
 		}
 
