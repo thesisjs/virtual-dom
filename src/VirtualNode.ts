@@ -34,6 +34,12 @@ export interface IVirtualCommentNode extends IVirtualNode {
 	dom: Comment;
 }
 
+export interface IVirtualHTMLNode extends IVirtualNode {
+	value: string;
+	tag: "<";
+	trackingNodes?: Node[];
+}
+
 export const NODE_TEXT = 0;
 export const NODE_COMMENT = 1;
 export const NODE_HTML = 2;
@@ -90,16 +96,28 @@ export class NodeUtils {
 
 	public static setDOMStyle(domNode: HTMLElement, style: VirtualNodeStyle) {
 		let styleKey;
+		let value;
+		let priority;
 
 		switch (typeof style) {
 			case "string": {
 				domNode.setAttribute("style", style);
 				break;
 			}
-
 			case "object": {
 				for (styleKey in style) {
-					domNode.style.setProperty(styleKey, (style as any)[styleKey]);
+					value = String((style as any)[styleKey]);
+					priority = undefined;
+
+					// Handling !important styles
+					if (value.endsWith("!important")) {
+						priority = "important";
+						value = value
+							.slice(0, value.length - "!important".length)
+							.trimRight();
+					}
+
+					domNode.style.setProperty(styleKey, value, priority);
 				}
 
 				break;
@@ -108,7 +126,7 @@ export class NodeUtils {
 	}
 
 	public static setDOMAttribute(domNode: HTMLElement, attr: string, value: VirtualNodeAttribute) {
-		if (!value) {
+		if (value === false || value === 0 || value === "0") {
 			return;
 		}
 
@@ -117,18 +135,19 @@ export class NodeUtils {
 				domNode.id = String(value);
 				break;
 			}
-
 			case "class": {
 				domNode.classList.value = String(value);
 				break;
 			}
-
 			case "style": {
 				NodeUtils.setDOMStyle(domNode, value as VirtualNodeStyle);
 				break;
 			}
-
 			default: {
+				if (value === true) {
+					value = "";
+				}
+
 				domNode.setAttribute(attr, String(value));
 				break;
 			}
@@ -152,6 +171,35 @@ export class NodeUtils {
 
 	public static getConnectedVirtualNode(domNode: Node) {
 		return (domNode as any)[VirtualNodeKey];
+	}
+
+	public static normalizeNode(node: IVirtualNode): IVirtualNode {
+		if (typeof node === "string") {
+			return {tag: "#", value: node};
+		}
+
+		if (node.children == null) {
+			return node;
+		}
+
+		if (
+			typeof node.children === "string" &&
+			(
+				NodeUtils.isTextNode(node) ||
+				NodeUtils.isCommentNode(node) ||
+				NodeUtils.isRawHTMLNode(node)
+			)
+		) {
+			node.value = node.children;
+			node.children = undefined;
+			return node;
+		}
+
+		if (!Array.isArray(node.children)) {
+			node.children = [node.children];
+		}
+
+		return node;
 	}
 
 }

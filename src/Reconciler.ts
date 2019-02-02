@@ -3,10 +3,12 @@ import {
 	NodeUtils,
 	NODE_TEXT,
 	NODE_COMMENT,
+	NODE_HTML,
 	NODE_ELEMENT,
 	NODE_FRAGMENT,
 	IVirtualTextNode,
 	IVirtualCommentNode,
+	IVirtualHTMLNode,
 } from "./VirtualNode";
 
 function mountTextNode(node: IVirtualTextNode) {
@@ -17,6 +19,21 @@ function mountTextNode(node: IVirtualTextNode) {
 function mountCommentNode(node: IVirtualCommentNode) {
 	node.dom = document.createComment(node.value);
 	NodeUtils.connectWithDOM(node);
+}
+
+function mountHTMLNode(node: IVirtualHTMLNode) {
+	node.dom = document.createDocumentFragment();
+	const helper = document.createElement("P");
+	node.dom.appendChild(helper);
+
+	helper.insertAdjacentHTML("beforebegin", node.value);
+	node.dom.removeChild(helper);
+
+	// Save nodes for updating later
+	node.trackingNodes = [];
+	for (let i = 0; i < node.dom.childNodes.length; i++) {
+		node.trackingNodes.push(node.dom.childNodes[i]);
+	}
 }
 
 function mountFragmentNode(node: IVirtualNode) {
@@ -48,6 +65,30 @@ function updateTextNode(oldNode: IVirtualTextNode, node: IVirtualTextNode) {
 function updateCommentNode(oldNode: IVirtualCommentNode, node: IVirtualCommentNode) {
 	NodeUtils.swapDOMConnection(oldNode, node);
 	node.dom.data = node.value;
+}
+
+function updateHTMLNode(oldNode: IVirtualHTMLNode, node: IVirtualHTMLNode) {
+	if (oldNode.value === node.value) {
+		return;
+	}
+
+	// Remove all tracked nodes
+	if (oldNode.trackingNodes) {
+		let trackingNode;
+
+		for (let i = 0; i < oldNode.trackingNodes.length; i++) {
+			trackingNode = oldNode.trackingNodes[i];
+
+			if (trackingNode.parentNode) {
+				trackingNode.parentNode.removeChild(trackingNode);
+			}
+		}
+	}
+
+	NodeUtils.disconnectWithDOM(oldNode.dom);
+	oldNode.dom = undefined;
+
+	mountHTMLNode(node);
 }
 
 // Assuming oldNode.tag === node.tag
@@ -132,6 +173,7 @@ export function mountNode(node: IVirtualNode) {
 	switch (NodeUtils.getType(node)) {
 		case NODE_TEXT: return mountTextNode(node as IVirtualTextNode);
 		case NODE_COMMENT: return mountCommentNode(node as IVirtualCommentNode);
+		case NODE_HTML: return mountHTMLNode(node as IVirtualHTMLNode);
 		case NODE_FRAGMENT: return mountFragmentNode(node);
 		case NODE_ELEMENT: return mountElementNode(node);
 	}
@@ -141,7 +183,7 @@ export function updateNode(oldNode: IVirtualNode, node: IVirtualNode) {
 	switch (NodeUtils.getType(node)) {
 		case NODE_TEXT: return updateTextNode(oldNode as IVirtualTextNode, node as IVirtualTextNode);
 		case NODE_COMMENT: return updateCommentNode(oldNode as IVirtualCommentNode, node as IVirtualCommentNode);
-		// case NODE_FRAGMENT: return mountFragmentNode(node);
+		case NODE_HTML: return updateHTMLNode(oldNode as IVirtualHTMLNode, node as IVirtualHTMLNode);
 		case NODE_ELEMENT: return updateElementNode(oldNode, node);
 	}
 }

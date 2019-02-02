@@ -4,6 +4,7 @@ import {mountNode, updateNode} from "./Reconciler";
 export class VirtualDOM {
 
 	public append(domNode: Node, node: IVirtualNode, insertBefore?: Node) {
+		node = NodeUtils.normalizeNode(node);
 		mountNode(node);
 
 		if (NodeUtils.hasChildren(node)) {
@@ -22,6 +23,7 @@ export class VirtualDOM {
 			return;
 		}
 
+		node = NodeUtils.normalizeNode(node);
 		updateNode(oldNode, node);
 
 		const oldChildren = NodeUtils.hasChildren(oldNode);
