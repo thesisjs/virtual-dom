@@ -1,5 +1,5 @@
 
-type VirtualNodeStyle = string | Partial<CSSStyleDeclaration>;
+type VirtualNodeStyle = string | object;
 
 type VirtualNodeAttribute = string | number | boolean | VirtualNodeStyle;
 
@@ -101,7 +101,7 @@ class NodeUtils {
 
 			case 'object': {
 				for (styleKey in style) {
-					domNode.style.setProperty(styleKey, style[styleKey]);
+					domNode.style.setProperty(styleKey, (style as any)[styleKey]);
 				}
 
 				break;
@@ -337,12 +337,24 @@ class VDom {
 
 		let oldChild;
 		let child;
+		let nextChild;
+		let dom;
+		let i;
+		let j;
 
 		// Updating children
 		if (oldChildren && newChildren) {
-			for (let i = 0; i < oldNode.children.length; i++) {
+			for (i = 0, j = 0; i < oldNode.children.length; i++, j++) {
 				oldChild = oldNode.children[i];
-				child = node.children[i];
+				child = node.children[j];
+
+				// Getting the next child not from this fragment
+				nextChild = oldChild.dom;
+				if (NodeUtils.isFragment(oldChild)) {
+					nextChild = oldChild.children[0] && oldChild.children[0].dom;
+				}
+
+				dom = node.dom || nextChild && nextChild.parentNode;
 
 				// Remove a node that no longer exists
 				if (!child) {
@@ -352,19 +364,20 @@ class VDom {
 
 				// Destroy previous child and create new
 				if (oldChild.tag !== child.tag) {
-					this.append(node.dom, child, oldChild.dom);
-					this.remove(oldChild);
+					this.append(dom, child, nextChild);
+					// Stay here
+					i--;
 					continue;
 				}
 
 				// Update a child by key
-				if (oldChild.key === child.key) {
+				if (child.key !== undefined && oldChild.key === child.key) {
 					this.update(oldChild, child);
 					continue;
 				}
 
 				// Insert new child before the old one
-				this.append(node.dom, child, oldChild.dom);
+				this.append(dom, child, nextChild);
 				// Stay here
 				i--;
 			}
@@ -376,7 +389,16 @@ class VDom {
 	public remove(node: VirtualNode) {
 		const {dom} = node;
 		NodeUtils.disconnectWithDOM(dom);
-		dom.parentNode.removeChild(dom);
+
+		if (NodeUtils.hasChildren(node)) {
+			for (let i = 0; i < node.children.length; i++) {
+				this.remove(node.children[i]);
+			}
+		}
+
+		if (!NodeUtils.isFragment(node) && dom && dom.parentNode) {
+			dom.parentNode.removeChild(dom);
+		}
 	}
 
 }
@@ -488,25 +510,8 @@ describe('update', () => {
 
 	test('update node with simple child', () => {
 		testVDomUpdate(
-			{
-				tag: 'div',
-				children: [
-					{
-						tag: 'strong'
-					}
-				]
-			},
-			{
-				tag: 'div',
-				children: [
-					{
-						tag: 'strong',
-						attrs: {
-							'data-id': 14
-						}
-					}
-				]
-			},
+			{tag: 'div', children: [{tag: 'strong'}]},
+			{tag: 'div', children: [{tag: 'strong', attrs: {'data-id': 14}}]},
 			'<div><strong data-id="14"></strong></div>',
 		);
 	});
@@ -516,54 +521,135 @@ describe('update', () => {
 			{
 				tag: 'div',
 				children: [
-					{
-						tag: 'span',
-						attrs: {
-							style: {
-								color: 'black'
-							}
-						}
-					},
-					{
-						tag: 'strong',
-						children: [
-							{
-								tag: '#',
-								value: 'Hello!'
-							}
-						]
-					}
+					{tag: 'span', attrs: {style: {color: 'black'}}},
+					{tag: 'strong', children: [{tag: '#', value: 'Hello!'}]}
 				]
 			},
 			{
 				tag: 'div',
 				children: [
-					{
-						tag: 'span',
-						attrs: {
-							style: {
-								color: 'black'
-							}
-						},
-						children: [
-							{
-								tag: '#',
-								value: 'World'
-							}
-						]
-					},
-					{
-						tag: 'strong',
-						children: [
-							{
-								tag: '!',
-								value: 'Hello!'
-							}
-						]
-					}
+					{tag: 'span', attrs: {style: {color: 'black'}}, children: [
+						{tag: '#', value: 'World'}
+					]},
+					{tag: 'strong', children: [{tag: '!', value: 'Hello!'}]}
 				]
 			},
 			'<div><span style="color: black;">World</span><strong><!--Hello!--></strong></div>',
+		);
+	});
+
+	test('update keyed node with multiple children', () => {
+		testVDomUpdate(
+			{
+				tag: 'div',
+				key: '1',
+				children: [
+					{tag: 'span', key: '2', attrs: {style: {color: 'black'}}},
+					{tag: 'strong', key: '3', children: [{tag: '#', key: '4', value: 'Hello!'}]}
+				]
+			},
+			{
+				tag: 'div',
+				key: '1',
+				children: [
+					{tag: 'span', key: '2', attrs: {style: {color: 'black'}}, children: [
+							{tag: '#', key: '5', value: 'World'}
+						]},
+					{tag: 'strong', key: '3', children: [{tag: '!', key: '4', value: 'Hello!'}]}
+				]
+			},
+			'<div><span style="color: black;">World</span><strong><!--Hello!--></strong></div>',
+		);
+	});
+
+	test('update fragment', () => {
+		testVDomUpdate(
+			{
+				children: [
+					{tag: 'div', key: '1', attrs: {style: {color: 'black'}}},
+					{tag: '!', key: '2', value: ' value goes next '},
+					{tag: '#', key: '3', value: 'Hello!'}
+				]
+			},
+			{
+				children: [
+					{tag: 'div', key: '1', attrs: {style: {opacity: '0'}}},
+					{tag: '#', key: '3', value: 'OwO'}
+				]
+			},
+			'<div style="opacity: 0;"></div>OwO',
+		);
+	});
+
+	test('update node with a fragment child', () => {
+		testVDomUpdate(
+			{
+				tag: 'div',
+				children: [
+					{tag: 'b'},
+					{
+						children: [
+							{tag: 'div', attrs: {style: {color: 'black'}}},
+							{tag: '!', value: ' value goes next '},
+							{tag: '#', value: 'Hello!'}
+						]
+					},
+					{tag: 'i'}
+				]
+			},
+			{
+				tag: 'div',
+				children: [
+					{tag: 'b'},
+					{tag: 'a'},
+					{
+						children: [
+							{tag: 'div', attrs: {style: {opacity: '0'}}},
+							{tag: '#', value: 'OwO'}
+						]
+					},
+					{tag: 'i'}
+				]
+			},
+			'<div><b></b><a></a><div style="opacity: 0;"></div>OwO<i></i></div>',
+		);
+	});
+
+	test('update node with a keyed fragment child', () => {
+		testVDomUpdate(
+			{
+				tag: 'div',
+				key: '1',
+				children: [
+					{tag: 'b', key: '2'},
+					{
+						key: '4',
+						children: [
+							{tag: 'div', key: '5', attrs: {style: {color: 'black'}}},
+							{tag: '!', key: '6', value: ' value goes next '},
+							{tag: '#', key: '7', value: 'Hello!'}
+						]
+					},
+					{tag: 'i', key: '8'}
+				]
+			},
+			{
+				tag: 'div',
+				key: '1',
+				children: [
+					{tag: 'b', key: '2'},
+					{tag: 'a', key: '3'},
+					{
+						key: '4',
+						children: [
+							{tag: 'div', key: '5', attrs: {style: {opacity: '0'}}},
+							{tag: '#', key: '7', value: 'OwO'}
+						]
+					},
+					{tag: 'i', key: '9'}
+				]
+			},
+			'<div><b></b><a></a><div style="opacity: 0;"></div>OwO<i></i></div>',
 		);
 	});
 
@@ -573,106 +659,63 @@ describe('append', () => {
 
 	test('append simple node', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-			},
+			{tag: 'div'},
 			'<div></div>',
 		);
 	});
 
 	test('append text node', () => {
 		testVDomAppend(
-			{
-				tag: '#',
-				value: 'Hello!'
-			},
+			{tag: '#', value: 'Hello!'},
 			'Hello!',
 		);
 	});
 
 	test('append comment node', () => {
 		testVDomAppend(
-			{
-				tag: '!',
-				value: 'Hello!'
-			},
+			{tag: '!', value: 'Hello!'},
 			'<!--Hello!-->',
 		);
 	});
 
 	test('append node with simple attribute', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				attrs: {
-					contenteditable: true
-				}
-			},
+			{tag: 'div', attrs: {contenteditable: true}},
 			'<div contenteditable="true"></div>',
 		);
 	});
 
 	test('append node with id', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				attrs: {
-					id: 'main'
-				}
-			},
+			{tag: 'div', attrs: {id: 'main'}},
 			'<div id="main"></div>',
 		);
 	});
 
 	test('append node with class', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				attrs: {
-					class: "main main-content"
-				}
-			},
+			{tag: 'div', attrs: {class: "main main-content"}},
 			'<div class="main main-content"></div>',
 		);
 	});
 
 	test('append node with style string', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				attrs: {
-					style: 'min-height: 40px; transition: all 2s;'
-				}
-			},
+			{tag: 'div', attrs: {style: 'min-height: 40px; transition: all 2s;'}},
 			'<div style="min-height: 40px; transition: all 2s;"></div>',
 		);
 	});
 
 	test('append node with style object', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				attrs: {
-					style: {
-						minHeight: '40px',
-						border: '0 none'
-					}
-				}
-			},
+			{tag: 'div', attrs: {style: {'min-height': '40px', border: '0 none'}}},
 			'<div style="min-height: 40px; border: 0px none;"></div>',
 		);
 	});
 
 	test('append node with simple child', () => {
 		testVDomAppend(
-			{
-				tag: 'div',
-				children: [
-					{
-						tag: 'strong'
-					}
-				]
-			},
+			{tag: 'div', children: [{tag: 'strong'}]},
 			'<div><strong></strong></div>',
 		);
 	});
@@ -682,23 +725,8 @@ describe('append', () => {
 			{
 				tag: 'div',
 				children: [
-					{
-						tag: 'span',
-						attrs: {
-							style: {
-								color: 'black'
-							}
-						}
-					},
-					{
-						tag: 'strong',
-						children: [
-							{
-								tag: '#',
-								value: 'Hello!'
-							}
-						]
-					}
+					{tag: 'span', attrs: {style: {color: 'black'}}},
+					{tag: 'strong', children: [{tag: '#', value: 'Hello!'}]}
 				]
 			},
 			'<div><span style="color: black;"></span><strong>Hello!</strong></div>',
@@ -709,22 +737,9 @@ describe('append', () => {
 		testVDomAppend(
 			{
 				children: [
-					{
-						tag: 'div',
-						attrs: {
-							style: {
-								color: 'black'
-							}
-						}
-					},
-					{
-						tag: '!',
-						value: ' value goes next '
-					},
-					{
-						tag: '#',
-						value: 'Hello!'
-					}
+					{tag: 'div', attrs: {style: {color: 'black'}}},
+					{tag: '!', value: ' value goes next '},
+					{tag: '#', value: 'Hello!'}
 				]
 			},
 			'<div style="color: black;"></div><!-- value goes next -->Hello!',
