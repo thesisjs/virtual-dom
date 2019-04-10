@@ -1028,9 +1028,9 @@ describe("cito", () => {
 
 				test(`[update] ${suiteName}: ${def1.name} -> ${def2.name}`, () => {
 					const root = document.createElement("I");
-					const node = deepClone(def1.node);
+					let node = deepClone(def1.node);
 
-					virtualDOM.append(root, node);
+					node = virtualDOM.append(root, node);
 					virtualDOM.update(node, deepClone(def2.node));
 
 					expect(root.innerHTML).toEqual(def2.html);
@@ -1038,11 +1038,11 @@ describe("cito", () => {
 
 				test(`[update] ${suiteName}: ${def1.name} -> ${def2.name} -> ${def1.name}`, () => {
 					const root = document.createElement("I");
-					const def1Node = deepClone(def1.node);
-					const def2Node = deepClone(def2.node);
+					let def1Node = deepClone(def1.node);
+					let def2Node = deepClone(def2.node);
 
-					virtualDOM.append(root, def1Node);
-					virtualDOM.update(def1Node, def2Node);
+					def1Node = virtualDOM.append(root, def1Node);
+					def2Node = virtualDOM.update(def1Node, def2Node);
 					virtualDOM.update(def2Node, deepClone(def1.node));
 
 					expect(root.innerHTML).toEqual(def1.html);

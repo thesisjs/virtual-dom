@@ -5,10 +5,12 @@ function testVDomUpdate(firstNode: IVirtualNode, secondNode: IVirtualNode, expec
 	const root = document.createElement("I");
 	const vDom = new VirtualDOM();
 
-	vDom.append(root, firstNode);
-	vDom.update(firstNode, secondNode);
+	firstNode = vDom.append(root, firstNode);
+	secondNode = vDom.update(firstNode, secondNode);
 
 	expect(root.innerHTML).toBe(expected);
+
+	return secondNode;
 }
 
 describe("update", () => {
@@ -240,12 +242,37 @@ describe("update", () => {
 		);
 	});
 
-	xtest("cito error test", () => {
-		testVDomUpdate(
-			{tag: "div", attrs: {}},
-			{tag: "div", attrs: {id: "id1"}},
-			'<div id="id1"></div>',
+	test("cito error test", () => {
+		const root = document.createElement("I");
+		const vDom = new VirtualDOM();
+
+		const firstNode = vDom.append(
+			root,
+			{
+				tag: "div",
+				children: [
+					{tag: "<", key: 0, children: "<b>t0.0</b><b>t0.1</b>"},
+				],
+			} as any,
 		);
+
+		const secondNode = vDom.update(
+			firstNode,
+			{
+				tag: "div",
+				children: [
+					{tag: "<", key: 0, children: "<b>t0.0</b><b>t0.1</b>"},
+					{tag: "<", key: 1, children: "<b>t1.0</b><b>t1.1</b>"},
+				],
+			} as any,
+		);
+
+		/*vDom.update(
+			secondNode,
+			{tag: "div", children: {tag: "<", children: ""}} as any,
+		);*/
+
+		expect(root.innerHTML).toBe("<div><b>t0.0</b><b>t0.1</b><b>t1.0</b><b>t1.1</b></div>");
 	});
 
 });

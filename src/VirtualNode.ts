@@ -61,7 +61,7 @@ export class NodeUtils {
 	}
 
 	public static isFragment(node: IVirtualNode) {
-		return node.tag === undefined;
+		return node.tag === undefined && Array.isArray(node.children);
 	}
 
 	public static isTextNode(node: IVirtualNode) {
@@ -80,8 +80,8 @@ export class NodeUtils {
 		return !!node.attrs;
 	}
 
-	public static hasChildren(node: IVirtualNode) {
-		return !!node.children;
+	public static hasChildren(node: IVirtualNode): boolean {
+		return !!(Array.isArray(node.children) && node.children.length);
 	}
 
 	public static getType(node: IVirtualNode): VirtualNodeType {

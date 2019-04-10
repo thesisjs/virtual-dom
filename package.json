@@ -1,5 +1,5 @@
 {
-  "name": "reshetaw",
+  "name": "@thesis/vdom",
   "version": "0.0.0",
   "description": "A drop-in replacement for unmaintained cito.js",
   "main": "dist/vdom.cjs.js",
@@ -13,7 +13,7 @@
   "keywords": [],
   "author": "Kaibito Young",
   "license": "MIT",
-  "repository": "https://github.com/8coon/reshetaw",
+  "repository": "https://github.com/thesis-js",
   "files": [
     "dist",
     "lib"

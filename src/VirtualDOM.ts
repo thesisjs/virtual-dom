@@ -1,9 +1,9 @@
-import {IVirtualNode, NodeUtils} from "./VirtualNode";
+import {IVirtualNode, NodeUtils, IVirtualHTMLNode} from "./VirtualNode";
 import {mountNode, updateNode} from "./Reconciler";
 
 export class VirtualDOM {
 
-	public append(domNode: Node, node: IVirtualNode, insertBefore?: Node) {
+	public append(domNode: Node, node: IVirtualNode, insertBefore?: Node): IVirtualNode {
 		node = NodeUtils.normalizeNode(node);
 		mountNode(node);
 
@@ -16,9 +16,11 @@ export class VirtualDOM {
 		} else {
 			domNode.appendChild(node.dom);
 		}
+
+		return node;
 	}
 
-	public update(oldNode: IVirtualNode, node: IVirtualNode) {
+	public update(oldNode: IVirtualNode, node: IVirtualNode): IVirtualNode {
 		if (oldNode === node) {
 			return;
 		}
@@ -31,7 +33,7 @@ export class VirtualDOM {
 
 		let oldChild;
 		let child;
-		let nextChild;
+		let insertBefore;
 		let dom;
 		let i;
 		let j;
@@ -43,22 +45,26 @@ export class VirtualDOM {
 				child = node.children[j];
 
 				// Getting the next child not from this fragment
-				nextChild = oldChild.dom;
+				insertBefore = oldChild.dom;
+
 				if (NodeUtils.isFragment(oldChild)) {
-					nextChild = oldChild.children[0] && oldChild.children[0].dom;
+					insertBefore = oldChild.children[0] && oldChild.children[0].dom;
+				} else if (NodeUtils.isRawHTMLNode(oldChild)) {
+					const {trackingNodes} = oldChild as IVirtualHTMLNode;
+					insertBefore = trackingNodes && trackingNodes[0];
 				}
 
-				dom = node.dom || nextChild && nextChild.parentNode;
+				dom = node.dom || insertBefore && insertBefore.parentNode;
 
 				// Remove a node that no longer exists
-				if (!child) {
+				if (child === undefined) {
 					this.remove(oldChild);
 					continue;
 				}
 
 				// Destroy previous child and create new
 				if (oldChild.tag !== child.tag) {
-					this.append(dom, child, nextChild);
+					node.children[j] = this.append(dom, child, insertBefore);
 					// Stay here
 					i--;
 					continue;
@@ -71,25 +77,61 @@ export class VirtualDOM {
 				}
 
 				// Insert new child before the old one
-				this.append(dom, child, nextChild);
+				node.children[j] = this.append(dom, child, insertBefore);
 				// Stay here
 				i--;
 			}
+
+			// Appending new children at the end
+			if (j < node.children.length) {
+				if (insertBefore) {
+					insertBefore = insertBefore.nextSibling;
+				}
+
+				dom = node.dom || insertBefore && insertBefore.parentNode;
+
+				for (i = j; i < node.children.length; i++) {
+					child = node.children[i];
+					node.children[i] = this.append(dom, child, insertBefore);
+				}
+			}
 		} else if (newChildren) {
 			this.mountChildren(node);
+		} else if (oldChildren) {
+			for (i = 0; i < oldNode.children.length; i++) {
+				this.remove(oldNode.children[i]);
+			}
 		}
+
+		return node;
 	}
 
 	public remove(node: IVirtualNode) {
 		const {dom} = node;
 		NodeUtils.disconnectWithDOM(dom);
 
+		// Remove children
 		if (NodeUtils.hasChildren(node)) {
 			for (let i = 0; i < node.children.length; i++) {
 				this.remove(node.children[i]);
 			}
 		}
 
+		// Remove raw HTML contents
+		if (NodeUtils.isRawHTMLNode(node)) {
+			const {trackingNodes} = node as IVirtualHTMLNode;
+			let trackingNode;
+
+			for (let i = 0; i < trackingNodes.length; i++) {
+				trackingNode = trackingNodes[i];
+
+				if (trackingNode.parentNode) {
+					trackingNode.parentNode.removeChild(trackingNode);
+				}
+			}
+		}
+
+		// Remove self from parent container
 		if (!NodeUtils.isFragment(node) && dom && dom.parentNode) {
 			dom.parentNode.removeChild(dom);
 		}
@@ -99,7 +141,7 @@ export class VirtualDOM {
 		const fragment = document.createDocumentFragment();
 
 		for (let i = 0; i < node.children.length; i++) {
-			this.append(fragment, node.children[i]);
+			node.children[i] = this.append(fragment, node.children[i]);
 		}
 
 		node.dom.appendChild(fragment);
